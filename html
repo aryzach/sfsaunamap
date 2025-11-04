@@ -1,0 +1,123 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>San Francisco Saunas Map (Pre-Geocoded, v2)</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    html, body { height: 100%; margin: 0; }
+    #map { height: 100vh; width: 100%; }
+    .popup h3 { margin: 0 0 6px 0; font-size: 16px; }
+    .popup .tag { display: inline-block; padding: 2px 6px; border: 1px solid #888; border-radius: 10px; font-size: 11px; margin-right: 6px; }
+    .legend { position: absolute; bottom: 12px; left: 12px; background: #fff; padding: 8px 10px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); font-size: 12px; z-index: 1000; }
+    .legend div { margin-bottom: 4px; }
+    .toolbar { position: absolute; top: 12px; left: 12px; background: #fff; padding: 8px 10px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); font-size: 12px; z-index: 1000; }
+    .toolbar label { margin-right: 10px; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <div class="toolbar">
+    <strong>Filter:</strong>
+    <label><input type="checkbox" id="f-trad" checked> Traditional</label>
+    <label><input type="checkbox" id="f-ir" checked> Infrared</label>
+    <label><input type="checkbox" id="f-oneoff" checked> One-off</label>
+    <label><input type="checkbox" id="f-member" checked> Membership</label>
+  </div>
+
+  <div class="legend">
+    <div><strong>Legend</strong></div>
+    <div><span class="tag">Traditional</span> Dry/Finnish/Banya</div>
+    <div><span class="tag">Infrared</span> IR cabin</div>
+    <div><span class="tag">One-off</span> Day pass or reservation</div>
+    <div><span class="tag">Membership</span> Ongoing membership required/available</div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    // Pre-geocoded data (approximate lat/lon for pins)
+    const PLACES = [
+      // Public bathhouses & spas
+      { name:"Kabuki Springs & Spa", address:"1750 Geary Blvd, San Francisco, CA 94115", lat:37.7856, lon:-122.4317, types:["Traditional"], access:["One-off"], url:"https://kabukisprings.com" },
+      { name:"Onsen", address:"466 Eddy St, San Francisco, CA 94109", lat:37.7830, lon:-122.4146, types:["Traditional"], access:["One-off"], url:"https://www.onsensf.com" },
+      { name:"Archimedes Banya (Banya SF)", address:"748 Innes Ave, San Francisco, CA 94124", lat:37.7288, lon:-122.3709, types:["Traditional"], access:["One-off","Membership"], url:"https://www.banyasf.com" },
+      { name:"Imperial Day Spa", address:"1875 Geary Blvd, San Francisco, CA 94115", lat:37.7839, lon:-122.4327, types:["Traditional"], access:["One-off"], url:"http://imperialdayspa.com" },
+      { name:"Pearl Spa & Sauna (women-only)", address:"1654 Post St, San Francisco, CA 94115", lat:37.7850, lon:-122.4309, types:["Traditional"], access:["One-off"], url:"https://www.pearlsf.com" },
+
+      // Infrared studios
+      { name:"Reboot Float & Cryo — Mission", address:"810 Valencia St, San Francisco, CA 94110", lat:37.7604, lon:-122.4210, types:["Infrared"], access:["One-off","Membership"], url:"https://www.rebootfloatspa.com" },
+      { name:"Reboot Float & Cryo — Marina", address:"1912 Lombard St, San Francisco, CA 94123", lat:37.7992, lon:-122.4326, types:["Infrared"], access:["One-off","Membership"], url:"https://www.rebootfloatspa.com" },
+
+      // Gyms, clubs & orgs with saunas
+      { name:"Equinox Sports Club San Francisco", address:"747 Market St, San Francisco, CA 94103", lat:37.7878, lon:-122.4025, types:["Traditional"], access:["Membership","One-off"], note:"Guest/day passes sometimes via spa booking", url:"https://www.equinox.com/clubs/san-francisco/sports-club-sf" },
+      { name:"Fitness SF — Fillmore", address:"1455 Fillmore St, San Francisco, CA 94115", lat:37.7829, lon:-122.4319, types:["Traditional"], access:["Membership","One-off"], note:"Day pass available citywide", url:"https://fitnesssf.com/gyms/fillmore/" },
+      { name:"Fitness SF — Transbay", address:"425 Mission St, San Francisco, CA 94105", lat:37.7908, lon:-122.3965, types:[], access:["Membership","One-off"], note:"Sauna unlisted; call before you go", url:"https://fitnesssf.com/gyms/transbay/" },
+      { name:"Bay Club — Financial District", address:"555 California St, San Francisco, CA 94104", lat:37.7925, lon:-122.4036, types:["Traditional"], access:["Membership"], url:"https://www.bayclubs.com/" },
+      { name:"Bay Club — Gateway", address:"370 Drumm St, San Francisco, CA 94111", lat:37.8040, lon:-122.3993, types:["Traditional"], access:["Membership"], url:"https://www.bayclubs.com/" },
+      { name:"JCCSF Fitness Center", address:"3200 California St, San Francisco, CA 94118", lat:37.7885, lon:-122.4469, types:["Traditional"], access:["Membership"], url:"https://www.jccsf.org/fitness-wellness/" },
+      { name:"UCSF Millberry Fitness & Recreation (Parnassus)", address:"500 Parnassus Ave, Level B1, San Francisco, CA 94143", lat:37.7631, lon:-122.4586, types:["Traditional"], access:["Membership","One-off"], note:"Public day/10-visit passes available", url:"https://campuslifeservices.ucsf.edu/fitnessrecreation" },
+      { name:"Embarcadero YMCA", address:"169 Steuart St, San Francisco, CA 94105", lat:37.7924, lon:-122.3917, types:["Traditional"], access:["Membership","One-off"], note:"Guest/day pass varies by branch", url:"https://www.ymcasf.org/locations/embarcadero-ymca" },
+      { name:"South End Rowing Club", address:"500 Jefferson St, San Francisco, CA 94109", lat:37.8066, lon:-122.4206, types:["Traditional"], access:["Membership"], url:"https://south-end.org/" },
+      { name:"Dolphin Club", address:"502 Jefferson St, San Francisco, CA 94109", lat:37.8067, lon:-122.4203, types:["Traditional"], access:["Membership"], url:"https://www.dolphinclub.org/" },
+
+      // Waterfront barrel sauna at Crane Cove
+      { name:"Dogpatch Paddle — Crane Cove Sauna", address:"701 Illinois St #A, San Francisco, CA 94107 (Crane Cove Park)", lat:37.7635, lon:-122.3870, types:["Traditional"], access:["One-off","Membership"], note:"Waterfront barrel sauna at Crane Cove Park", url:"https://www.dogpatchpaddle.com/sauna" }
+    ];
+
+    function tags(arr){ return arr.map(t=>`<span class="tag">${t}</span>`).join(" "); }
+    function popupHTML(p){
+      const typeTags = p.types.length ? tags(p.types) : '<span class="tag">Type TBD</span>';
+      const accessTags = tags(p.access);
+      const noteLine = p.note ? `<div style="margin-top:6px;color:#555;">${p.note}</div>` : "";
+      const link = p.url ? `<div style="margin-top:6px;"><a href="${p.url}" target="_blank" rel="noopener">Website</a></div>` : "";
+      return `<div class="popup"><h3>${p.name}</h3><div>${p.address}</div><div style="margin-top:6px;">${typeTags} ${accessTags}</div>${noteLine}${link}</div>`;
+    }
+
+    // Init map + tiles
+    const map = L.map('map');
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    // Draw markers
+    const allMarkers = [];
+    const layerGroup = L.layerGroup().addTo(map);
+    for (const p of PLACES){
+      const m = L.marker([p.lat, p.lon]).bindPopup(popupHTML(p));
+      m._meta = p;
+      allMarkers.push(m);
+      m.addTo(layerGroup);
+    }
+    const bounds = L.latLngBounds(allMarkers.map(m => m.getLatLng()));
+    map.fitBounds(bounds.pad(0.1));
+
+    // Filters
+    function applyFilters(){
+      const fTrad = document.getElementById('f-trad').checked;
+      const fIR = document.getElementById('f-ir').checked;
+      const fOneOff = document.getElementById('f-oneoff').checked;
+      const fMember = document.getElementById('f-member').checked;
+      layerGroup.clearLayers();
+      const visible = [];
+      for (const m of allMarkers){
+        const t = m._meta.types;
+        const a = m._meta.access;
+        const okType = (fTrad && t.includes("Traditional")) || (fIR && t.includes("Infrared")) || (!t.length && (fTrad || fIR));
+        const okAcc = (fOneOff && a.includes("One-off")) || (fMember && a.includes("Membership")) || (!a.length && (fOneOff || fMember));
+        if (okType && okAcc){ m.addTo(layerGroup); visible.push(m); }
+      }
+      if (visible.length){
+        const b = L.latLngBounds(visible.map(m => m.getLatLng()));
+        map.fitBounds(b.pad(0.1));
+      }
+    }
+    for (const id of ["f-trad","f-ir","f-oneoff","f-member"]){
+      document.getElementById(id).addEventListener('change', applyFilters);
+    }
+  </script>
+</body>
+</html>
